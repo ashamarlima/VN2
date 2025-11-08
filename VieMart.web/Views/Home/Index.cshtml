@@ -1,0 +1,84 @@
+﻿@model ProductBrowseVm
+
+@{
+    ViewData["Title"] = "Welcome";
+}
+
+<div class="container py-3">
+    <h2 class="text-center mb-4">Browse Products</h2>
+
+    <!-- Filters -->
+    <form method="get" class="row g-2 mb-4">
+        <div class="col-md-4">
+            <input class="form-control" name="Q" value="@Model.Q" placeholder="Search name, brand, description..." />
+        </div>
+
+        <div class="col-md-3">
+            <select class="form-select" name="Category">
+                <option value="All">All categories</option>
+                @foreach (var c in Model.Categories)
+                {
+                    <option value="@c" selected="@(Model.Category == c ? "selected" : null)">@c</option>
+                }
+            </select>
+        </div>
+
+        <div class="col-md-2">
+            <input class="form-control" type="number" step="0.01" name="MinPrice"
+                   value="@(Model.MinPrice?.ToString())" placeholder="Min price" />
+        </div>
+
+        <div class="col-md-2">
+            <input class="form-control" type="number" step="0.01" name="MaxPrice"
+                   value="@(Model.MaxPrice?.ToString())" placeholder="Max price" />
+        </div>
+
+        <div class="col-md-1 d-grid">
+            <button class="btn btn-primary" type="submit">Filter</button>
+        </div>
+
+        <div class="col-12 mt-1">
+            <a class="btn btn-link p-0" href="@Url.Action("Index", "Home")">Reset</a>
+        </div>
+    </form>
+
+    <!-- Results -->
+    <table class="table table-striped table-hover">
+        <thead>
+            <tr>
+                <th style="width:60px;">Id</th>
+                <th>Name</th>
+                <th>Brand</th>
+                <th style="width:120px;">Price</th>
+                <th>Category</th>
+                <th style="width:120px;">Image</th>
+                <th style="width:160px;">Created At</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (Model.Results.Any())
+            {
+                foreach (var p in Model.Results)
+                {
+                    <tr>
+                        <td>@p.Id</td>
+                        <td>@p.Name</td>
+                        <td>@p.Brand</td>
+                        <td>@p.Price.ToString("C")</td>
+                        <td>@p.Category</td>
+                        <td>
+                            <img src="~/products/@p.ImageFileName" width="100" alt="@p.Name" />
+                        </td>
+                        <td>@p.CreatedAt.ToString("yyyy-MM-dd")</td>
+                    </tr>
+                }
+            }
+            else
+            {
+                <tr>
+                    <td colspan="7" class="text-center text-muted">No products match your filters.</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
