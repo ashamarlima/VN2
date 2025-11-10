@@ -1,84 +1,51 @@
-﻿@model ProductBrowseVm
-
-@{
-    ViewData["Title"] = "Welcome";
+﻿@{
+    ViewData["Title"] = "URL Shortener";
 }
 
-<div class="container py-3">
-    <h2 class="text-center mb-4">Browse Products</h2>
+<div class="container py-4" style="max-width:600px">
+    <h2 class="mb-3 text-center">URL Shortener</h2>
 
-    <!-- Filters -->
-    <form method="get" class="row g-2 mb-4">
-        <div class="col-md-4">
-            <input class="form-control" name="Q" value="@Model.Q" placeholder="Search name, brand, description..." />
-        </div>
+    <div class="mb-3">
+        <input id="longUrl" classx="form-control" placeholder="https://example.com/very/long/url" />
+    </div>
 
-        <div class="col-md-3">
-            <select class="form-select" name="Category">
-                <option value="All">All categories</option>
-                @foreach (var c in Model.Categories)
-                {
-                    <option value="@c" selected="@(Model.Category == c ? "selected" : null)">@c</option>
-                }
-            </select>
-        </div>
+    <button id="btnShorten" class="btn btn-primary w-100">Shorten</button>
 
-        <div class="col-md-2">
-            <input class="form-control" type="number" step="0.01" name="MinPrice"
-                   value="@(Model.MinPrice?.ToString())" placeholder="Min price" />
-        </div>
-
-        <div class="col-md-2">
-            <input class="form-control" type="number" step="0.01" name="MaxPrice"
-                   value="@(Model.MaxPrice?.ToString())" placeholder="Max price" />
-        </div>
-
-        <div class="col-md-1 d-grid">
-            <button class="btn btn-primary" type="submit">Filter</button>
-        </div>
-
-        <div class="col-12 mt-1">
-            <a class="btn btn-link p-0" href="@Url.Action("Index", "Home")">Reset</a>
-        </div>
-    </form>
-
-    <!-- Results -->
-    <table class="table table-striped table-hover">
-        <thead>
-            <tr>
-                <th style="width:60px;">Id</th>
-                <th>Name</th>
-                <th>Brand</th>
-                <th style="width:120px;">Price</th>
-                <th>Category</th>
-                <th style="width:120px;">Image</th>
-                <th style="width:160px;">Created At</th>
-            </tr>
-        </thead>
-        <tbody>
-            @if (Model.Results.Any())
-            {
-                foreach (var p in Model.Results)
-                {
-                    <tr>
-                        <td>@p.Id</td>
-                        <td>@p.Name</td>
-                        <td>@p.Brand</td>
-                        <td>@p.Price.ToString("C")</td>
-                        <td>@p.Category</td>
-                        <td>
-                            <img src="~/products/@p.ImageFileName" width="100" alt="@p.Name" />
-                        </td>
-                        <td>@p.CreatedAt.ToString("yyyy-MM-dd")</td>
-                    </tr>
-                }
-            }
-            else
-            {
-                <tr>
-                    <td colspan="7" class="text-center text-muted">No products match your filters.</td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <div id="result" class="alert alert-success mt-3 d-none"></div>
+    <div id="error" class="alert alert-danger mt-3 d-none"></div>
 </div>
+
+@section Scripts {
+    <script>
+        document.getElementById('btnShorten').addEventListener('click', async () => {
+            const url = document.getElementById('longUrl').value.trim();
+            const result = document.getElementById('result');
+            const error = document.getElementById('error');
+            result.classList.add('d-none');
+            error.classList.add('d-none');
+
+            try {
+                const res = await fetch('/api/shorten', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url })
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    const shortUrl = data.shortUrl || data.ShortUrl;
+                    result.innerHTML = `<a href="${shortUrl}" target="_blank" class="text-white text-decoration-none fw-bold">${shortUrl}</a>`;
+                    result.classList.remove('d-none');
+                } else {
+                    error.textContent = (data && (data.title || data.error || data)) || 'Invalid URL';
+                    error.classList.remove('d-none');
+                }
+            } catch (e) {
+                error.textContent = 'Request failed. Check console and API.';
+                error.classList.remove('d-none');
+                console.error(e);
+            }
+        });
+    </script>
+}

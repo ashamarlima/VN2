@@ -1,5 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
-using Microsoft.AspNetCore.Http;   // for IFormFile
+using Microsoft.AspNetCore.Http;    
 
 namespace VieMart.web.Models
 {

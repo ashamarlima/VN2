@@ -1,186 +1,144 @@
-﻿using System;
-using System.IO;
-using System.Linq;                             // OrderByDescending
+﻿using FluentValidation;
+using FluentValidation.AspNetCore;
+using FluentValidation.Results;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Hosting;            // IWebHostEnvironment
-using VieMart.web.Services;
 using VieMart.web.Models;
+using VieMart.web.Services;
 
 namespace VieMart.web.Controllers
 {
     public class ProductsController : Controller
     {
-        private readonly ApplicationDbContext context;
-        private readonly IWebHostEnvironment environment;
+        private readonly ApplicationDbContext _context;
+        private readonly IWebHostEnvironment _env;
+        private readonly IValidator<ProductDto> _validator;
 
-        public ProductsController(ApplicationDbContext context, IWebHostEnvironment environment)
+        public ProductsController(ApplicationDbContext context, IWebHostEnvironment env, IValidator<ProductDto> validator)
         {
-            this.context = context;
-            this.environment = environment;
+            _context = context;
+            _env = env;
+            _validator = validator;
         }
 
         public IActionResult Index()
         {
-            var products = context.Products.OrderByDescending(p => p.Id).ToList();
+            var products = _context.Products.OrderByDescending(p => p.Id).ToList();
             return View(products);
         }
 
-        public IActionResult Create()
-        {
-            return View();
-        }
+        // ---------- Create ----------
+        public IActionResult Create() => View();
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult Create(ProductDto productDto)
+        public IActionResult Create(ProductDto dto)
         {
-            if (productDto.ImageFile == null)
+            // validate with Create ruleset
+            ValidationResult vr = _validator.Validate(dto, o => o.IncludeRuleSets("Create"));
+            if (!vr.IsValid)
             {
-                ModelState.AddModelError("ImageFile", "Product image is required.");
+                vr.AddToModelState(ModelState, null);
+                return View(dto);
             }
 
-            if (!ModelState.IsValid)
+            // save image
+            string? fileName = null;
+            if (dto.ImageFile != null)
             {
-                return View(productDto);
-            }
-
-            // save the image file (timestamp + original extension) to wwwroot/products
-            string? newFileName = null;
-            if (productDto.ImageFile != null)
-            {
-                var folder = Path.Combine(environment.WebRootPath, "products");
+                var folder = Path.Combine(_env.WebRootPath, "products");
                 Directory.CreateDirectory(folder);
 
-                newFileName = DateTime.Now.ToString("yyyyMMddHHmmssfff") +
-                              Path.GetExtension(productDto.ImageFile.FileName);
+                fileName = DateTime.Now.ToString("yyyyMMddHHmmssfff") +
+                           Path.GetExtension(dto.ImageFile.FileName);
 
-                var imageFullPath = Path.Combine(folder, newFileName);
-                using (var stream = System.IO.File.Create(imageFullPath))
-                {
-                    productDto.ImageFile.CopyTo(stream);
-                }
+                using var stream = System.IO.File.Create(Path.Combine(folder, fileName));
+                dto.ImageFile.CopyTo(stream);
             }
 
-            // map DTO -> entity
-            var product = new Product
+            var entity = new Product
             {
-                Name = productDto.Name,
-                Brand = productDto.Brand,
-                Price = productDto.Price,
-                Category = productDto.Category,
-                Description = productDto.Description,
-                ImageFileName = newFileName ?? "noimage.png",
+                Name = dto.Name,
+                Brand = dto.Brand,
+                Price = dto.Price,
+                Category = dto.Category,
+                Description = dto.Description,
+                ImageFileName = fileName ?? "noimage.png",
                 CreatedAt = DateTime.UtcNow
             };
 
-            context.Products.Add(product);
-            context.SaveChanges();
-
-            return RedirectToAction("Index", "Products");
+            _context.Products.Add(entity);
+            _context.SaveChanges();
+            return RedirectToAction(nameof(Index));
         }
 
-        // -------- EDIT (GET) --------
+        // ---------- Edit ----------
         public IActionResult Edit(int id)
         {
-            var product = context.Products.Find(id);
-            if (product == null)
-            {
-                return RedirectToAction("Index", "Products");
-            }
+            var p = _context.Products.Find(id);
+            if (p == null) return RedirectToAction(nameof(Index));
 
-            var productDto = new ProductDto
+            var dto = new ProductDto
             {
-                Name = product.Name,
-                Brand = product.Brand,
-                Price = product.Price,
-                Category = product.Category,
-                Description = product.Description
+                Name = p.Name,
+                Brand = p.Brand,
+                Price = p.Price,
+                Category = p.Category,
+                Description = p.Description
             };
-
             ViewData["ProductId"] = id;
-            ViewData["ImageFileName"] = product.ImageFileName;
-            ViewData["CreatedAt"] = product.CreatedAt;
-
-            return View(productDto);
+            ViewData["ImageFileName"] = p.ImageFileName;
+            ViewData["CreatedAt"] = p.CreatedAt;
+            return View(dto);
         }
 
-        // -------- EDIT (POST) --------
         [HttpPost]
         [ValidateAntiForgeryToken]
         public IActionResult Edit(int id, ProductDto dto)
         {
-            var product = context.Products.Find(id);
-            if (product == null)
-            {
-                return RedirectToAction("Index", "Products");
-            }
+            var product = _context.Products.Find(id);
+            if (product == null) return RedirectToAction(nameof(Index));
 
-            if (!ModelState.IsValid)
+            // validate with Edit ruleset
+            var vr = _validator.Validate(dto, o => o.IncludeRuleSets("Edit"));
+            if (!vr.IsValid)
             {
+                vr.AddToModelState(ModelState, null);
                 ViewData["ProductId"] = id;
                 ViewData["ImageFileName"] = product.ImageFileName;
                 ViewData["CreatedAt"] = product.CreatedAt;
                 return View(dto);
             }
 
-            // update simple fields
             product.Name = dto.Name;
             product.Brand = dto.Brand;
             product.Price = dto.Price;
             product.Category = dto.Category;
             product.Description = dto.Description;
 
-            // replace image only if a new file was uploaded
+            // replace image only if new one uploaded
             if (dto.ImageFile != null)
             {
-                var folder = Path.Combine(environment.WebRootPath, "products");
+                var folder = Path.Combine(_env.WebRootPath, "products");
                 Directory.CreateDirectory(folder);
 
-                // delete old file if present
+                // delete old
                 if (!string.IsNullOrWhiteSpace(product.ImageFileName))
                 {
                     var oldPath = Path.Combine(folder, product.ImageFileName);
-                    if (System.IO.File.Exists(oldPath))
-                        System.IO.File.Delete(oldPath);
+                    if (System.IO.File.Exists(oldPath)) System.IO.File.Delete(oldPath);
                 }
 
                 var newFileName = DateTime.Now.ToString("yyyyMMddHHmmssfff") +
                                   Path.GetExtension(dto.ImageFile.FileName);
 
-                var newPath = Path.Combine(folder, newFileName);
-                using var stream = System.IO.File.Create(newPath);
+                using var stream = System.IO.File.Create(Path.Combine(folder, newFileName));
                 dto.ImageFile.CopyTo(stream);
 
                 product.ImageFileName = newFileName;
             }
 
-            context.SaveChanges();
-            return RedirectToAction("Index", "Products");
-        }
-
-        // -------- DELETE (immediate) --------
-        public IActionResult Delete(int id)
-        {
-            var product = context.Products.Find(id);
-            if (product == null)
-            {
-                return RedirectToAction("Index", "Products");
-            }
-
-            // delete image file if exists
-            if (!string.IsNullOrWhiteSpace(product.ImageFileName))
-            {
-                var imageFullPath = Path.Combine(environment.WebRootPath, "products", product.ImageFileName);
-                if (System.IO.File.Exists(imageFullPath))
-                {
-                    System.IO.File.Delete(imageFullPath);
-                }
-            }
-
-            context.Products.Remove(product);
-            context.SaveChanges();
-
-            return RedirectToAction("Index", "Products");
+            _context.SaveChanges();
+            return RedirectToAction(nameof(Index));
         }
     }
 }

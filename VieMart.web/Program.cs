@@ -1,45 +1,38 @@
 using Microsoft.EntityFrameworkCore;
 using VieMart.web.Services;
+using FluentValidation;
+using FluentValidation.AspNetCore;
+var builder = WebApplication.CreateBuilder(args);
 
-namespace VieMart.web
-{
-    public class Program
-    {
-        public static void Main(string[] args)
-        {
-            var builder = WebApplication.CreateBuilder(args);
 
-            // Add services to the container.
-            builder.Services.AddControllersWithViews();
+builder.Services.AddControllersWithViews();
 
-            builder.Services.AddDbContext<ApplicationDbContext >(options =>
-            {
-                var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-                options.UseSqlServer(connectionString);
-            });
+builder.Services
+    .AddFluentValidationAutoValidation()          // populates ModelState from validators
+    .AddFluentValidationClientsideAdapters();     // enable client-side messages
 
-            var app = builder.Build();
+builder.Services.AddValidatorsFromAssemblyContaining<ProductDtoValidator>();
+builder.Services.AddControllersWithViews();
 
-            // Configure the HTTP request pipeline.
-            if (!app.Environment.IsDevelopment())
-            {
-                app.UseExceptionHandler("/Home/Error");
-                // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
-                app.UseHsts();
-            }
+// NEW: also add plain controllers (for [ApiController] ones)
+builder.Services.AddControllers();
 
-            app.UseHttpsRedirection();
-            app.UseStaticFiles();
+builder.Services.AddDbContext<ApplicationDbContext>(opt =>
+    opt.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-            app.UseRouting();
+var app = builder.Build();
 
-            app.UseAuthorization();
+app.UseHttpsRedirection();
+app.UseStaticFiles();
 
-            app.MapControllerRoute(
-                name: "default",
-                pattern: "{controller=Home}/{action=Index}/{id?}");
+app.UseRouting();
 
-            app.Run();
-        }
-    }
-}
+app.UseAuthorization();
+ 
+app.MapControllers();
+ 
+app.MapControllerRoute(
+    name: "default",
+    pattern: "{controller=Home}/{action=Index}/{id?}");
+
+app.Run();
